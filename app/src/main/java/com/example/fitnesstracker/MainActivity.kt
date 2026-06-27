@@ -16,6 +16,7 @@ import com.github.mikephil.charting.data.BarData
 import com.github.mikephil.charting.data.BarDataSet
 import com.github.mikephil.charting.data.BarEntry
 import kotlin.math.sqrt
+import com.github.mikephil.charting.components.XAxis
 
 @SuppressLint("SetTextI18n")
 class MainActivity : AppCompatActivity(), SensorEventListener {
@@ -98,10 +99,22 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     override fun onSensorChanged(event: SensorEvent) {
         when (event.sensor.type) {
             // TODO Case 1: TYPE_ACCELEROMETER: store accelValues, call handleAcceletometer()
+            Sensor.TYPE_ACCELEROMETER -> {
+                accelValues = event.values.clone()
+                handleAccelerometer(event.values)
+            }
             // TODO Case 2: TYPE_GYROSCOPE: call handleGyroscope()
+            Sensor.TYPE_GYROSCOPE -> {
+                handleAccelerometer(event.values)
+            }
             // TODO Case 3: TYPE_MAGNETIC_FIELD: store magnetvalues, call updateCompass()
+            Sensor.TYPE_MAGNETIC_FIELD -> {
+                magnetValues = event.values.clone()
+                updateCompass()
+            }
         }
     }
+
 
     // pre-built: hangleAccelerometer
     private fun handleAccelerometer(values: FloatArray) {
@@ -121,8 +134,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     // Assignment: implement classifyMotion
     // Return "Stationary", "Walking", or "Jogging" based on magnitude (m/s^2)
     private fun classifyMotion(magnitude: Float): String {
-        return "Stationary"
-        // TODO: replace with when block using the threshold above
+        return when {
+            magnitude < STATIONARY_THRESHOLD -> "Stationary"
+            magnitude < WALKING_THRESHOLD -> "Walking"
+            else -> "Jogging"
+        }
+        // TODO: replace with when block using the threshold above - Completed by Leo in class
     }
 
     // Assignment: Implement handleGyroscope
@@ -143,7 +160,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     // Hint: val entries = hourlySteps.mapIndexed { i, v -> barEntry(i.toFloat() v) }
     //  color = 0xFF80DEEA,toInt(), dataset label = "Steps", Description = "Step count per hour"
     private fun setupChart() {
-
+        val entries =hourlySteps.mapIndexed { index, value ->
+            BarEntry(index.toFloat(), value)
+        }
+        val dataSet = BarDataSet(entries, "Steps")
+        barChart.data = BarData(dataSet)
+        barChart.invalidate()
     }
 
     // final report:
