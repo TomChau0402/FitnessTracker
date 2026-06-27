@@ -75,9 +75,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     override fun onResume() {
         super.onResume()
-        accelerometer?.let { sensorManager.registerListener(this, it, sensorManager.SENSOR_DELAY_FASTEST)}
-        gyroscope?.let { sensorManager.registerListener(this, it, sensorManager.SENSOR_DELAY_FASTEST)}
-        magnetometer?.let { sensorManager.registerListener(this, it, sensorManager.SENSOR_DELAY_FASTEST)}
+        accelerometer?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)}
+        gyroscope?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)}
+        magnetometer?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)}
     }
 
     override fun onPause(){
