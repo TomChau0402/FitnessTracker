@@ -17,6 +17,16 @@ import com.github.mikephil.charting.data.BarDataSet
 import com.github.mikephil.charting.data.BarEntry
 import kotlin.math.sqrt
 import com.github.mikephil.charting.components.XAxis
+import android.Manifest
+import android.content.pm.PackageManager
+import android.content.res.ColorStateList
+import android.os.Handler
+import android.os.Looper
+import android.view.View
+import android.widget.LinearLayout
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+
 
 @SuppressLint("SetTextI18n")
 class MainActivity : AppCompatActivity(), SensorEventListener {
@@ -29,6 +39,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var btnCalibrate: Button
     private lateinit var btnRefreshChart: Button
     private lateinit var barChart: BarChart
+
+    private lateinit var btnDemoMode: Button
+    private lateinit var tvStepCount: TextView
+    private lateinit var tvCalories: TextView
+    private lateinit var tvDistance: TextView
+
 
     // Sensors
     private lateinit var sensorManager: SensorManager
@@ -51,9 +67,18 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     // Sample data for chart
     private val hourlySteps = floatArrayOf(1000f, 1200f, 0f, 800f)
 
+    // DEMO VAR
+    private var sessionStepCount = 0
+    private var initialStepCount = -1
+    private var isDemoMode = false
+    private var demoHandler = Handler(Looper.getMainLooper())
+    //private lateinit var database: AppDatabse
+
     companion object {
         private const val STATIONARY_THRESHOLD = 2.0f
         private const val WALKING_THRESHOLD = 12.0f
+        private const val CALORIES_PER_STEP = 0.04f
+        private const val STRIDE_LENGTH = 0.762f
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -67,11 +92,13 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         btnRefreshChart = findViewById(R.id.btnRefreshChart)
         btnCalibrate = findViewById(R.id.btnCalibrate)
         barChart = findViewById(R.id.barChart)
+        btnDemoMode = findViewById(R.id.btnDemoMode)
 
         initSensors()
         setupChart()
         btnCalibrate.setOnClickListener { startCalibration() }
         btnRefreshChart.setOnClickListener { setupChart() }
+        btnDemoMode.setOnClickListener { toggleDemoMode() }
     }
 
     override fun onResume() {
@@ -104,17 +131,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 handleAccelerometer(event.values)
             }
             // TODO Case 2: TYPE_GYROSCOPE: call handleGyroscope()
-            Sensor.TYPE_GYROSCOPE -> {
-                handleAccelerometer(event.values)
-            }
             // TODO Case 3: TYPE_MAGNETIC_FIELD: store magnetvalues, call updateCompass()
-            Sensor.TYPE_MAGNETIC_FIELD -> {
-                magnetValues = event.values.clone()
-                updateCompass()
-            }
         }
     }
-
 
     // pre-built: hangleAccelerometer
     private fun handleAccelerometer(values: FloatArray) {
@@ -139,7 +158,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             magnitude < WALKING_THRESHOLD -> "Walking"
             else -> "Jogging"
         }
-        // TODO: replace with when block using the threshold above - Completed by Leo in class
+        // TODO: replace with when block using the threshold above
     }
 
     // Assignment: Implement handleGyroscope
@@ -160,12 +179,19 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     // Hint: val entries = hourlySteps.mapIndexed { i, v -> barEntry(i.toFloat() v) }
     //  color = 0xFF80DEEA,toInt(), dataset label = "Steps", Description = "Step count per hour"
     private fun setupChart() {
-        val entries =hourlySteps.mapIndexed { index, value ->
+        val entries = hourlySteps.mapIndexed { index, value ->
             BarEntry(index.toFloat(), value)
         }
-        val dataSet = BarDataSet(entries, "Steps")
+        val dataSet = BarDataSet(entries, "Steps").apply {
+            // color of the bar
+            // set the valueTextSize 10
+        }
         barChart.data = BarData(dataSet)
-        barChart.invalidate()
+        barChart.apply{
+            // data, description, and both axis
+            setFitBars(true)
+            invalidate()
+        }
     }
 
     // final report:
@@ -185,6 +211,83 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private fun finishCalibration() {
 
     }
+
+    private fun handleStepCounter(totalSteps: Int) {
+        if (initialStepCount == -1) {
+            initialStepCount = totalSteps
+        }
+
+        sessionStepCount = totalSteps - initialStepCount
+        updateHealthMetrics()
+        updateChartWithSteps()
+    }
+
+    private fun updateHealthMetrics() {
+        tvStepCount.text = "Steps: $sessionStepCount"
+        tvCalories.text = "Calories: ${"%.1f".format(calculateCalories(sessionStepCount))} kcal"
+        tvDistance.text = "Distance: ${"%.2f".format(calcuateDistance(sessionStepCount))} km"
+    }
+
+    private fun updateChartWithSteps() {
+        val updatedSteps = floatArrayOf(
+            sessionStepCount * 0.3f,
+            sessionStepCount * 0.4f,
+            sessionStepCount * 0.2f,
+            sessionStepCount * 0.1f,
+        )
+
+        val entries = updatedSteps.mapIndexed { i, v -> BarEntry(i.toFloat(), v) }
+        val dataSet = BarDataSet(entries, "Steps").apply{
+            color = 0xFF80DEEA.toInt()
+            valueTextSize = 10f
+        }
+        barChart.apply {
+            data = BarData(dataSet)
+            invalidate()
+        }
+    }
+
+    private fun toggleDemoMode() {
+        isDemoMode = !isDemoMode
+        if (isDemoMode) {
+            btnDemoMode.text = " Stop Demo"
+            btnDemoMode.backgroundTintList = ColorStateList.valueOf(0xFFE53935.toInt())
+
+            demoHandler.post(demoRunnable)
+        } else {
+            btnDemoMode.text = "Start Demo"
+            btnDemoMode.backgroundTintList = ColorStateList.valueOf(0xFF6B4EAD.toInt())
+            demoHandler.removeCallbacks(demoRunnable)
+        }
+    }
+
+    private val demoRunnable = object : Runnable {
+        private var compassAngle = 0f
+        override fun run() {
+            if (!isDemoMode) return
+            // Sine wave walking simulation - feeds into handleAccelerometer()
+            val t = System.currentTimeMillis()
+            val walkX = (Math.sin(t / 200.0) * 3).toFloat()
+            val walkY = (Math.cos(t / 300.0) * 2).toFloat()
+            val walkZ = 9.8f + (Math.sin(t / 150.0) * 4).toFloat()
+            handleAccelerometer(floatArrayOf(walkX, walkY, walkZ))
+            // Increment steps, update all metrics and chart
+            sessionStepCount += 2
+            updateHealthMetrics()
+            updateChartWithSteps()
+            demoHandler.postDelayed(this, 500)
+        }
+    }
+
+
+    private fun calculateCalories(steps: Int): Float =
+        // 0.04 kacl per step - average for adult walking pace
+        steps * CALORIES_PER_STEP
+
+
+    private fun calcuateDistance(steps: Int): Float =
+        // Multiply steps by stride length in meters, then divide by 1000 to get km
+        (steps * STRIDE_LENGTH) / 1000f
 
 
 
