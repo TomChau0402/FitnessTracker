@@ -18,8 +18,11 @@ import com.github.mikephil.charting.data.BarEntry
 import kotlin.math.sqrt
 import com.github.mikephil.charting.components.XAxis
 import android.Manifest
+import android.R.attr.orientation
+import android.R.attr.value
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.icu.lang.UCharacter.getDirection
 import android.os.Handler
 import android.os.Looper
 import android.view.View
@@ -93,6 +96,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         btnCalibrate = findViewById(R.id.btnCalibrate)
         barChart = findViewById(R.id.barChart)
         btnDemoMode = findViewById(R.id.btnDemoMode)
+        tvStepCount = findViewById(R.id.tvStepCount)
+        tvCalories = findViewById(R.id.tvCalories)
+        tvDistance = findViewById(R.id.tvDistance)
 
         initSensors()
         setupChart()
@@ -114,6 +120,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     // FINAL: add onStop() override + call unregisterListener(this)
+    override fun onStop() {
+        super.onStop()
+        sensorManager.unregisterListener(this)
+    }
 
     private fun initSensors() {
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -131,7 +141,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 handleAccelerometer(event.values)
             }
             // TODO Case 2: TYPE_GYROSCOPE: call handleGyroscope()
+            Sensor.TYPE_GYROSCOPE -> {
+                handleGyroscope(event.values)
+            }
             // TODO Case 3: TYPE_MAGNETIC_FIELD: store magnetvalues, call updateCompass()
+            Sensor.TYPE_MAGNETIC_FIELD -> {
+                magnetValues = event.values.clone()
+                updateCompass()
+            }
         }
     }
 
@@ -164,15 +181,35 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     // Assignment: Implement handleGyroscope
     // values[0]=pitch, values[1]=roll, values[2]=yaw
     // tvGyro.text = "Rotation (pitch, roll, yaw): %.2f"
-    private fun handleGyroscope(vales: FloatArray) {
-
+    private fun handleGyroscope(values: FloatArray) {
+        tvGyro.text = "Rotation (Pitch, Roll, Yaw): " +
+                "${"%.2f".format(values[0])}, " +
+                "${"%.2f".format(values[1])}, " +
+                "${"%.2f".format(values[2])}"
     }
 
     // Assignment
     // Hint: SensorManager.getRotationMatrix(rotationMatrix, inclinationMatrix, accelValues, magnetValues)
     //      SensorManager.getOrientation(rotationMatrix, orientation) orientation[0]
     private fun updateCompass() {
+        val rotationMatrix = FloatArray(9)
+        val inclinationMatrix = FloatArray(9)
+        if (SensorManager.getRotationMatrix(rotationMatrix, inclinationMatrix, accelValues, magnetValues)){
+            val orientation = FloatArray(3)
+            SensorManager.getOrientation(rotationMatrix, orientation)
+            val azimuth = Math.toDegrees(orientation[0].toDouble()).toFloat()
+            val normalized = (azimuth + 360) % 360
+            tvDirection.text = "Direction: ${getDirection(normalized)}"
+        }
+    }
 
+    private fun getDirection(degrees: Float): String {
+        return when {
+            degrees < 45 || degrees > 315 -> "N"
+            degrees < 135 -> "E"
+            degrees < 225 -> "S"
+            else -> "W"
+        }
     }
 
     // Assignment 2
@@ -184,12 +221,19 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
         val dataSet = BarDataSet(entries, "Steps").apply {
             // color of the bar
+            color = 0xFF80DEEA.toInt()
             // set the valueTextSize 10
+            valueTextSize = 10f
         }
-        barChart.data = BarData(dataSet)
         barChart.apply{
+            data = BarData(dataSet)
+            description.text = "Step Counter Per Hour"
+            xAxis.position = XAxis.XAxisPosition.BOTTOM
+            xAxis.granularity = 1f
+            axisRight.isEnabled = false
             // data, description, and both axis
             setFitBars(true)
+            animateY(800)
             invalidate()
         }
     }
@@ -197,19 +241,33 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     // final report:
     // Show tvAccuracy warning if accuracy == SENSOR_STATUS_UNRELIABLE or ACCURACY_LOW
     override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {
-
+        if (accuracy == SensorManager.SENSOR_STATUS_UNRELIABLE ||
+            accuracy == SensorManager.SENSOR_STATUS_ACCURACY_LOW) {
+            tvAccuracy.text = "${sensor.name} accuracy LOW - Please Recalibrate."
+        } else {
+            tvAccuracy.text = ""
+        }
     }
 
     // final report:
     // Clear samples, set isCalibration = true, disable, Toast "hold the device steady"
     private fun startCalibration() {
-
+        calibrationSamples.clear() // discard any previous samples
+        isCalibrating = true       // handleAccelerometer() checks this flag
+        btnCalibrate.isEnabled = false // prevent double-tap during collection
+        Toast.makeText(this, "Calibration started. Hold the device steady.", Toast.LENGTH_SHORT).show()
     }
 
     // final report
     // Average calibrationSamples for each axis -> set baselineX, baselineY, baselineZ
     private fun finishCalibration() {
-
+        isCalibrating = false
+        baselineX = calibrationSamples.map { it[0] }.average().toFloat()
+        baselineY = calibrationSamples.map { it[1] }.average().toFloat()
+        baselineZ = calibrationSamples.map { it[2] }.average().toFloat()
+        calibrationSamples.clear()
+        btnCalibrate.isEnabled = true
+        Toast.makeText(this, "Calibrated! Baseline updated.", Toast.LENGTH_SHORT).show()
     }
 
     private fun handleStepCounter(totalSteps: Int) {
@@ -272,6 +330,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             val walkZ = 9.8f + (Math.sin(t / 150.0) * 4).toFloat()
             handleAccelerometer(floatArrayOf(walkX, walkY, walkZ))
             // Increment steps, update all metrics and chart
+            compassAngle = (compassAngle + 5f) % 360f
+            tvDirection.text = "Direction: ${getDirection(compassAngle)}"
             sessionStepCount += 2
             updateHealthMetrics()
             updateChartWithSteps()

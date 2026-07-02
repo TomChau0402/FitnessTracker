@@ -79,6 +79,33 @@
             android:text="Demo Mode"
             android:layout_marginEnd="12dp"/>
 
+        <TextView
+            android:id="@+id/tvStepCount"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp"
+            android:text="Steps: 0"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvCalories"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Calories: 0.0 kcal"
+            android:textSize='16sp'
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/tvDistance"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Distance: 0.00 km"
+            android:textSize="16sp"
+            android:layout_marginBottom="16dp"/>
+
+
 
     </LinearLayout>
 
